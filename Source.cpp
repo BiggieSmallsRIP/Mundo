@@ -109,7 +109,7 @@ void KillstealLogic()
 	{
 		if (Menu::Killsteal::UseQ->GetBool() && Spells::Q->IsReady() && Enemy->IsValidTarget(Spells::Q->Range()))
 		{
-			auto QDamage = g_Common->CalculateDamageOnUnit(g_LocalPlayer, Enemy, DamageType::Magical, std::vector<float> {20, 22.5, 25, 27.5, 30}[Spells::Q->Level() - 1] * Enemy->Health());
+			auto QDamage = g_Common->GetSpellDamage(g_LocalPlayer, Enemy, SpellSlot::W, false);
 			if (QDamage >= Enemy->RealHealth(false, true))
 				Spells::Q->Cast(Enemy, HitChance::High);
 		}
@@ -119,7 +119,9 @@ void KillstealLogic()
 // combo
 void ComboLogic()
 {
-	if (Menu::Combo::Enabled->GetBool() && g_LocalPlayer->HealthPercent() >= 20)
+
+
+	if (Menu::Combo::Enabled->GetBool())
 	{
 		// Q  max range ## add fast pred if we fighting super close
 		if (Menu::Combo::UseQ->GetBool() && Spells::Q->IsReady())
@@ -130,8 +132,16 @@ void ComboLogic()
 				Spells::Q->Cast(Target, HitChance::VeryHigh);
 			}
 		}
+
+		// R logic
+		if (Menu::Combo::UseR && Spells::R->IsReady())
+		{
+			if (CountEnemiesInRange(g_LocalPlayer->Position(), 400.f) >= 1 && g_LocalPlayer->HealthPercent() <= Menu::Combo::RHP->GetInt())
+				Spells::R->Cast();
+		}
+
 		// W in combo ### toggle spell. turn off if nothing in range
-		if (Menu::Combo::UseW->GetBool() && Spells::W->IsReady() && !g_LocalPlayer->HasBuff("BurningAgony"))
+		if (Menu::Combo::UseW->GetBool() && Spells::W->IsReady() && !g_LocalPlayer->HasBuff("BurningAgony") && g_LocalPlayer->HealthPercent() >= 20)
 		{
 			auto Target = g_Common->GetTarget(Spells::W->Range(), DamageType::Magical);
 			if (Target && Target->IsValidTarget())
@@ -198,16 +208,23 @@ void OnAfterAttack(IGameObject* target)
 			}
 		}
 	}
+	{
+		if (Menu::LaneClear::Enabled && Menu::LaneClear::UseE->GetBool() && Spells::E->IsReady())
+
+		{
+			const auto OrbwalkerTarget = g_Orbwalker->GetTarget();
+			if (OrbwalkerTarget && OrbwalkerTarget->IsMonster()  && g_Orbwalker->IsModeActive(eOrbwalkingMode::kModeLaneClear))
+			{
+				Spells::E->Cast();
+				g_Orbwalker->ResetAA();
+			}
+		}
+	}
 }
 
 void MiscLogic()
 {
-	// R logic
-	if (Menu::Combo::UseR && Spells::R->IsReady())
-	{
-		if (CountEnemiesInRange(g_LocalPlayer->Position(), 400.f) >= 1 && g_LocalPlayer->HealthPercent() <= Menu::Combo::RHP->GetInt())
-			Spells::R->Cast();
-	}
+
 	// Dashing and Immobile 
 	const auto Enemies = g_ObjectManager->GetChampions(false);
 	for (auto Enemy : Enemies)
@@ -247,6 +264,17 @@ void MiscLogic()
 			Spells::W->Cast();
 		}		
 	}
+
+	//Auto kill monsters with Q
+	{
+		const auto Enemies = g_ObjectManager->GetJungleMobs();
+		for (auto Enemy : Enemies)
+		{
+			auto QDamage = g_Common->GetSpellDamage(g_LocalPlayer, Enemy, SpellSlot::Q, false);
+			if (Enemy && Enemy->IsInRange(Spells::Q->Range()) && Spells::Q->IsReady() && QDamage >= Enemy->RealHealth(false, true) && g_Orbwalker->IsModeActive(eOrbwalkingMode::kModeLaneClear))
+				Spells::Q->Cast(Enemy, HitChance::High);
+		}
+	}
 }
 
 // Lane Clear Logic
@@ -266,7 +294,7 @@ void LaneCLearLogic()
 		if (Menu::LaneClear::UseQ->GetBool())
 		{
 			auto QDamage = g_Common->GetSpellDamage(g_LocalPlayer, Target, SpellSlot::Q, false);
-			if (Target && Target->IsMinion() && Target->IsInRange(Spells::Q->Range()) && Spells::Q->IsReady() && QDamage >= Target->RealHealth(false, true))
+			if (Target && Target->IsMinion() && Target->IsInRange(Spells::Q->Range()) && Target->Distance(g_LocalPlayer) >= 250.f && Spells::Q->IsReady() && QDamage >= Target->RealHealth(false, true))
 				Spells::Q->Cast(Target, HitChance::High);
 		}
 		if (Menu::LaneClear::UseW->GetBool())
@@ -294,13 +322,10 @@ void LaneCLearLogic()
 				Spells::Q->Cast(Monster, HitChance::VeryHigh);
 
 			if (Monster && Monster->IsMonster() && Spells::W->IsReady() && Menu::LaneClear::UseW->GetBool() && Monster->IsInRange(Spells::W->Range()) && !g_LocalPlayer->HasBuff("BurningAgony"))
-
 				Spells::W->Cast(Monster, HitChance::High);
 
-			if (Monster && Monster->IsMonster() && Spells::E->IsReady() && Menu::LaneClear::UseE->GetBool() && Monster->IsInRange(Spells::E->Range()))
-
-				if (Menu::LaneClear::UseE->GetBool() && Monster->Distance(g_LocalPlayer) >= 190.f)
-					Spells::E->Cast();
+			//if (Monster && Monster->IsMonster() && Spells::E->IsReady() && Menu::LaneClear::UseE->GetBool() && Monster->IsInRange(Spells::E->Range()))
+			//		Spells::E->Cast();
 		}
 	}
 }
